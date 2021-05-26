@@ -6,6 +6,9 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#ifdef CS333_P2
+#include "pdx.h"
+#endif
 
 static char *states[] = {
   [UNUSED]    "unused",
@@ -149,6 +152,8 @@ allocproc(void)
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
   p->start_ticks = ticks;
+  p->cpu_ticks_in = 0;
+  p->cpu_ticks_total = 0;
 
   return p;
 }
@@ -176,6 +181,11 @@ userinit(void)
   p->tf->eflags = FL_IF;
   p->tf->esp = PGSIZE;
   p->tf->eip = 0;  // beginning of initcode.S
+
+  #ifdef CS333_P2
+  p->uid = DEFAULT_UID;
+  p->gid = DEFAULT_GID;
+  #endif
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
@@ -248,6 +258,8 @@ fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
+  np->uid = curproc->uid;
+  np->gid = curproc->gid;
 
   acquire(&ptable.lock);
   np->state = RUNNABLE;
@@ -390,6 +402,7 @@ scheduler(void)
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
+      p->cpu_ticks_in = ticks;
       swtch(&(c->scheduler), p->context);
       switchkvm();
 
@@ -430,7 +443,10 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
+
+  p->cpu_ticks_total += (ticks - p->cpu_ticks_in);
   swtch(&p->context, mycpu()->scheduler);
+  
   mycpu()->intena = intena;
 }
 
@@ -557,7 +573,42 @@ kill(int pid)
 void
 procdumpP2P3P4(struct proc *p, char *state_string)
 {
-  cprintf("TODO for Project 2, delete this line and implement procdumpP2P3P4() in proc.c to print a row\n");
+  cprintf("%d\t%s\t\t%d\t%d\t", p->pid, p->name, p->uid, p->gid);
+  
+  if(p->pid == 1){
+    cprintf("%d\t", p->pid);
+  }
+  else{
+    cprintf("%d\t", p->parent->pid);
+  }
+
+  
+  int rem = 0;
+  int current_ticks = ticks - (p->start_ticks);
+  if(current_ticks > 1000){
+    rem = current_ticks % 1000;
+    current_ticks = current_ticks / 1000;
+  }
+
+  if(rem == 0){
+    cprintf("0.%d\t", current_ticks);
+  }else{
+    cprintf("%d.%d\t", current_ticks, rem);
+  }
+
+  int cpu_rem = 0;
+  int current_cpu_ticks = p->cpu_ticks_total;
+  if(current_cpu_ticks > 1000){
+    cpu_rem = current_cpu_ticks % 1000;
+    current_cpu_ticks = current_cpu_ticks / 1000;
+  }
+
+  if(cpu_rem == 0){
+    cprintf("0.%d\t%s\t%d\t", current_cpu_ticks, states[p->state], p->sz);
+  }else{
+    cprintf("%d.%d\t%s\t%d\t", current_cpu_ticks, cpu_rem, states[p->state], p->sz);
+  }
+  
   return;
 }
 #elif defined(CS333_P1)
