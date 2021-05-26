@@ -1,265 +1,296 @@
-# xv6 Code Modification
-### Makefile
+# xv6 Code Modification Project 2
 
+## Makefile
 ```diff
-diff --git a/Makefile b/Makefile
-index 6483959..e0f2a1d 100644
---- a/Makefile
-+++ b/Makefile
-@@ -1,6 +1,6 @@
- # Set flag to correct CS333 project number: 1, 2, ...
- # 0 == original xv6-pdx distribution functionality
--CS333_PROJECT ?= 0
-+CS333_PROJECT ?= 1
- PRINT_SYSCALLS ?= 0
- CS333_CFLAGS ?= -DPDX_XV6
- ifeq ($(CS333_CFLAGS), -DPDX_XV6)
-@@ -13,7 +13,7 @@ endif
-```
-
-# System Call Tracing Modification
-### Makefile
-```diff
-diff --git a/Makefile b/Makefile
-index 6483959..0c155f6 100644
---- a/Makefile
-+++ b/Makefile
+diff --git a/Source-code/Makefile b/Source-code/Makefile
+index 0c155f6..45a375a 100644
+--- a/Source-code/Makefile
++++ b/Source-code/Makefile
 @@ -1,7 +1,7 @@
  # Set flag to correct CS333 project number: 1, 2, ...
  # 0 == original xv6-pdx distribution functionality
--CS333_PROJECT ?= 0
--PRINT_SYSCALLS ?= 0
-+CS333_PROJECT ?= 1
-+PRINT_SYSCALLS ?= 1
+-CS333_PROJECT ?= 1
+-PRINT_SYSCALLS ?= 1
++CS333_PROJECT ?= 2
++PRINT_SYSCALLS ?= 0
  CS333_CFLAGS ?= -DPDX_XV6
  ifeq ($(CS333_CFLAGS), -DPDX_XV6)
- CS333_UPROGS +=        _halt _uptime
-@@ -13,7 +13,7 @@ endif
+ CS333_UPROGS +=	_halt _uptime
+@@ -18,7 +18,7 @@ endif
 ```
-### syscall.c
+
+## UID, GID and PPID
 ```diff
-diff --git a/syscall.c b/syscall.c
-index 9105b52..e3543f1 100644
---- a/syscall.c
-+++ b/syscall.c
+diff --git a/Source-code/proc.c b/Source-code/proc.c
+index 228a7e5..9ffdeee 100644
+--- a/Source-code/proc.c
++++ b/Source-code/proc.c
+@@ -6,6 +6,9 @@
+ #include "x86.h"
+ #include "proc.h"
+ #include "spinlock.h"
++#ifdef CS333_P2
++#include "pdx.h"
++#endif
  
- #ifdef PRINT_SYSCALLS
-@@ -172,6 +178,9 @@ syscall(void)
-   num = curproc->tf->eax;
-   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-     curproc->tf->eax = syscalls[num]();
-+    #ifdef PRINT_SYSCALLS
-+      cprintf("%s -> %d\n", syscallnames[num], curproc->tf->eax);
-+    #endif
-   } else {
-     cprintf("%d %s: unknown sys call %d\n",
-             curproc->pid, curproc->name, num);
-```
-# Date System Call Modification
-### Makefile
-``` diff
-diff --git a/Makefile b/Makefile
-index 6483959..0c155f6 100644
---- a/Makefile
-+++ b/Makefile
-
-@@ -13,7 +13,7 @@ endif
+ static char *states[] = {
+   [UNUSED]    "unused",
+@@ -149,6 +152,8 @@ allocproc(void)
+   memset(p->context, 0, sizeof *p->context);
+   p->context->eip = (uint)forkret;
+   p->start_ticks = ticks;
++  p->cpu_ticks_in = 0;
++  p->cpu_ticks_total = 0;
  
- ifeq ($(CS333_PROJECT), 1)
- CS333_CFLAGS += -DCS333_P1
--CS333_UPROGS += #_date
-+CS333_UPROGS += _date
- endif
-```
-
-### date.c
-``` diff
-diff --git a/date.c b/date.c
-index cff33a2..496c92f 100644
---- a/date.c
-+++ b/date.c
-@@ -23,7 +23,7 @@ int
- main(int argc, char *argv[])
- {
-   int day;
--  char *s;
-+  // char *s;
-   struct rtcdate r;
- 
-   if (date(&r)) {
-@@ -33,14 +33,14 @@ main(int argc, char *argv[])
-   }
- 
-   day = dayofweek(r.year, r.month, r.day);
--  s = r.hour < 12 ? "AM" : "PM";
-+  // s = r.hour < 12 ? "AM" : "PM";
- 
--  r.hour %= 12;
--  if (r.hour == 0) r.hour = 12;
-+  // r.hour %= 12;
-+  // if (r.hour == 0) r.hour = 12;
- 
--  printf(1, "%s %s%d %s %d %s%d:%s%d:%s%d %s UTC\n", days[day], PAD(r.day), r.day,
--      months[r.month], r.year, PAD(r.hour), r.hour, PAD(r.minute), r.minute,
--      PAD(r.second), r.second, s);
-+  printf(1, "%s %s %s%d %s%d:%s%d:%s%d UTC %d\n", days[day], months[r.month],
-+       PAD(r.day), r.day, PAD(r.hour), r.hour, PAD(r.minute), r.minute,
-+      PAD(r.second), r.second, r.year);
- 
-   exit();
+   return p;
  }
-```
+@@ -177,6 +182,11 @@ userinit(void)
+   p->tf->esp = PGSIZE;
+   p->tf->eip = 0;  // beginning of initcode.S
+ 
++  #ifdef CS333_P2
++  p->uid = DEFAULT_UID;
++  p->gid = DEFAULT_GID;
++  #endif
++
+   safestrcpy(p->name, "initcode", sizeof(p->name));
+   p->cwd = namei("/");
+ 
+@@ -248,6 +258,8 @@ fork(void)
+   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+ 
+   pid = np->pid;
++  np->uid = curproc->uid;
++  np->gid = curproc->gid;
+ 
+   acquire(&ptable.lock);
+   np->state = RUNNABLE;
 
-### syscall.c
-``` diff
-diff --git a/syscall.c b/syscall.c
-index 9105b52..e3543f1 100644
---- a/syscall.c
-+++ b/syscall.c
-@@ -106,6 +106,9 @@ extern int sys_uptime(void);
- #ifdef PDX_XV6
- extern int sys_halt(void);
- #endif // PDX_XV6
-+#ifdef CS333_P1
-+  extern int sys_date(void);
+
+diff --git a/Source-code/proc.h b/Source-code/proc.h
+index c7ee129..3811f7d 100644
+--- a/Source-code/proc.h
++++ b/Source-code/proc.h
+@@ -41,6 +41,8 @@ struct proc {
+   char *kstack;                // Bottom of kernel stack for this process
+   enum procstate state;        // Process state
+   uint pid;                    // Process ID
++  uint uid;
++  uint gid;
+   struct proc *parent;         // Parent process. NULL indicates no parent
+   struct trapframe *tf;        // Trap frame for current syscall
+   struct context *context;     // swtch() here to run process
+
+diff --git a/Source-code/runoff1 b/Source-code/runoff1
+old mode 100755
+new mode 100644
+diff --git a/Source-code/show1 b/Source-code/show1
+old mode 100755
+new mode 100644
+diff --git a/Source-code/spinp b/Source-code/spinp
+old mode 100755
+new mode 100644
+diff --git a/Source-code/syscall.c b/Source-code/syscall.c
+index e3543f1..5ee0f7d 100644
+--- a/Source-code/syscall.c
++++ b/Source-code/syscall.c
+@@ -109,6 +109,13 @@ extern int sys_halt(void);
+ #ifdef CS333_P1
+   extern int sys_date(void);
+ #endif
++#ifdef CS333_P2
++  extern int sys_getuid(void);
++  extern int sys_getgid(void);
++  extern int sys_getppid(void);
++  extern int sys_setuid(void);
++  extern int sys_setgid(void);
 +#endif
  
  static int (*syscalls[])(void) = {
  [SYS_fork]    sys_fork,
-@@ -132,6 +135,9 @@ static int (*syscalls[])(void) = {
- #ifdef PDX_XV6
- [SYS_halt]    sys_halt,
- #endif // PDX_XV6
-+#ifdef CS333_P1
-+  [SYS_date]    sys_date,
+@@ -138,6 +145,13 @@ static int (*syscalls[])(void) = {
+ #ifdef CS333_P1
+   [SYS_date]    sys_date,
+ #endif
++#ifdef CS333_P2
++  [SYS_getuid]    sys_getuid,
++  [SYS_getgid]    sys_getgid,
++  [SYS_getppid]    sys_getppid,
++  [SYS_setuid]    sys_setuid,
++  [SYS_setgid]    sys_setgid,
 +#endif
  };
-
-```
-
-### syscall.h
-``` diff
-diff --git a/syscall.h b/syscall.h
-index 7fc8ce1..14f3e17 100644
---- a/syscall.h
-+++ b/syscall.h
-@@ -22,3 +22,4 @@
- #define SYS_close   SYS_mkdir+1
+ 
+ #ifdef PRINT_SYSCALLS
+@@ -166,6 +180,16 @@ static char *syscallnames[] = {
+ #ifdef PDX_XV6
+   [SYS_halt]    "halt",
+ #endif // PDX_XV6
++#ifdef CS333_P1
++  [SYS_date]    "date",
++#endif
++#ifdef CS333_P2
++  [SYS_getuid]    "getuid",
++  [SYS_getgid]    "getgid",
++  [SYS_getppid]    "getppid",
++  [SYS_setuid]    "setuid",
++  [SYS_setgid]    "setgid",
++#endif
+ };
+ #endif // PRINT_SYSCALLS
+ 
+diff --git a/Source-code/syscall.h b/Source-code/syscall.h
+index 14f3e17..9f3e692 100644
+--- a/Source-code/syscall.h
++++ b/Source-code/syscall.h
+@@ -23,3 +23,8 @@
  #define SYS_halt    SYS_close+1
  // student system calls begin here. Follow the existing pattern.
-+#define SYS_date    SYS_halt+1
-```
-
-### sysproc.c
-``` diff
-diff --git a/sysproc.c b/sysproc.c
-index 98563ea..a7fcfed 100644
---- a/sysproc.c
-+++ b/sysproc.c
-@@ -15,7 +15,6 @@ sys_fork(void)
- {
-   return fork();
- }
--
- int
- sys_exit(void)
- {
-@@ -97,3 +96,17 @@ sys_halt(void)
-   return 0;
+ #define SYS_date    SYS_halt+1
++#define SYS_getuid    SYS_date+1
++#define SYS_getgid    SYS_getuid+1
++#define SYS_getppid    SYS_getgid+1
++#define SYS_setuid    SYS_getppid+1
++#define SYS_setgid    SYS_setuid+1
+diff --git a/Source-code/sysproc.c b/Source-code/sysproc.c
+index a7fcfed..0b33317 100644
+--- a/Source-code/sysproc.c
++++ b/Source-code/sysproc.c
+@@ -97,7 +97,7 @@ sys_halt(void)
  }
  #endif // PDX_XV6
-+
-+
-+int
-+sys_date(void)
-+{
-+  struct rtcdate *d;
-+  
-+  if(argptr(0, (void*)&d, sizeof(struct rtcdate)) < 0)
-+  {
-+     return -1;
-+  }
-+  cmostime(d);
-+  return 0;
-+}
-```
-
-### user.h
-``` diff
-diff --git a/user.h b/user.h
-index 31d9134..99995f8 100644
---- a/user.h
-+++ b/user.h
-@@ -25,6 +25,8 @@ char* sbrk(int);
- int sleep(int);
- int uptime(void);
- int halt(void);
+ 
+-
 +#ifdef CS333_P1
-+int date(struct rtcdate*);
+ int
+ sys_date(void)
+ {
+@@ -110,3 +110,52 @@ sys_date(void)
+   cmostime(d);
+   return 0;
+ }
 +#endif
 +
-```
-
-### usys.S
-``` diff
-iff --git a/usys.S b/usys.S
-index 0d4eaed..84bd80b 100644
---- a/usys.S
-+++ b/usys.S
-@@ -30,3 +30,4 @@ SYSCALL(sbrk)
- SYSCALL(sleep)
++#ifdef CS333_P2
++int
++sys_getuid(void)
++{
++  return myproc()->uid;
++}
++
++int
++sys_getgid(void)
++{
++  return myproc()->gid;
++}
++
++int
++sys_getppid(void)
++{
++  if(myproc()->pid != 1){
++    return myproc()->parent->pid; 
++  }
++  return myproc()->pid;
++}
++
++int
++sys_setuid(void)
++{
++  int var;
++
++  if (argint(0, &var) < 0 || var > 32767 || var < 0){
++    return -1;
++  }
++  myproc()->uid = (uint)var;
++  return 0;
++}
++
++int
++sys_setgid(void)
++{
++  int var;
++
++  if (argint(0, &var) < 0 || var > 32767 || var < 0){
++    return -1;
++  }
++  myproc()->gid = (uint)var;
++  return 0;
++}
++
++#endif
+\ No newline at end of file
+diff --git a/Source-code/user.h b/Source-code/user.h
+index 631d07e..f994fb1 100644
+--- a/Source-code/user.h
++++ b/Source-code/user.h
+@@ -29,6 +29,14 @@ int halt(void);
+     int date(struct rtcdate*);
+ #endif
+ 
++#ifdef CS333_P2
++    uint getuid(void);
++    uint getgid(void);
++    uint getppid(void);
++    int setuid(uint);
++    int setgid(uint);
++#endif
++
+ 
+ // ulib.c
+ int stat(char*, struct stat*);
+diff --git a/Source-code/usys.S b/Source-code/usys.S
+index 84bd80b..090de9a 100644
+--- a/Source-code/usys.S
++++ b/Source-code/usys.S
+@@ -31,3 +31,8 @@ SYSCALL(sleep)
  SYSCALL(uptime)
  SYSCALL(halt)
-+SYSCALL(date)
+ SYSCALL(date)
++SYSCALL(getuid)
++SYSCALL(getgid)
++SYSCALL(getppid)
++SYSCALL(setuid)
++SYSCALL(setgid)
+
 ```
 
-# Control-P
-### proc.c
-``` diff
-diff --git a/proc.c b/proc.c
-index d030537..228a7e5 100644
---- a/proc.c
-+++ b/proc.c
-@@ -148,6 +148,7 @@ allocproc(void)
-   p->context = (struct context*)sp;
+
+## Process Execution Time
+```diff
+diff --git a/Source-code/proc.c b/Source-code/proc.c
+index 228a7e5..9ffdeee 100644
+--- a/Source-code/proc.c
++++ b/Source-code/proc.c
+@@ -149,6 +152,8 @@ allocproc(void)
    memset(p->context, 0, sizeof *p->context);
    p->context->eip = (uint)forkret;
-+  p->start_ticks = ticks;
+   p->start_ticks = ticks;
++  p->cpu_ticks_in = 0;
++  p->cpu_ticks_total = 0;
  
    return p;
+@@ -390,6 +402,7 @@ scheduler(void)
+       c->proc = p;
+       switchuvm(p);
+       p->state = RUNNING;
++      p->cpu_ticks_in = ticks;
+       swtch(&(c->scheduler), p->context);
+       switchkvm();
+ 
+@@ -430,7 +443,10 @@ sched(void)
+   if(readeflags()&FL_IF)
+     panic("sched interruptible");
+   intena = mycpu()->intena;
++
++  p->cpu_ticks_total += (ticks - p->cpu_ticks_in);
+   swtch(&p->context, mycpu()->scheduler);
++  
+   mycpu()->intena = intena;
  }
-@@ -563,7 +564,17 @@ procdumpP2P3P4(struct proc *p, char *state_string)
- void
- procdumpP1(struct proc *p, char *state_string)
- {
--  cprintf("TODO for Project 1, delete this line and implement procdumpP1() in proc.c to print a row\n");
-+  int rem = 0;
-+  int current_ticks = ticks - (p->start_ticks);
-+  if(current_ticks > 1000){
-+    rem = current_ticks % 1000;
-+    current_ticks = current_ticks / 1000;
-+  }
-+  if(rem == 0){
-+    cprintf("%d\t%s\t\t0.%d\t%s\t%d\t", p->pid, p->name, current_ticks, states[p->state], p->sz);
-+  }else{
-+    cprintf("%d\t%s\t\t%d.%d\t%s\t%d\t", p->pid, p->name, current_ticks, rem, states[p->state], p->sz);
-+  }
-   return;
- }
- #endif
+
 ```
 
-### proc.h
+## PS command
 ``` diff
-diff --git a/proc.h b/proc.h
-index 0a0b4c5..c7ee129 100644
---- a/proc.h
-+++ b/proc.h
-@@ -49,6 +49,7 @@ struct proc {
-   struct file *ofile[NOFILE];  // Open files
-   struct inode *cwd;           // Current directory
-   char name[16];               // Process name (debugging)
-+  uint start_ticks;
- };
- 
+
 ```

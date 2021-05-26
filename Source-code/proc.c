@@ -5,6 +5,7 @@
 #include "mmu.h"
 #include "x86.h"
 #include "proc.h"
+#include "uproc.h"
 #include "spinlock.h"
 #ifdef CS333_P2
 #include "pdx.h"
@@ -628,7 +629,49 @@ procdumpP1(struct proc *p, char *state_string)
   }
   return;
 }
-#endif
+#endif //CS333_P1
+
+#ifdef CS333_P2
+// Helper function to access ptable for sys_getprocs
+int
+copy(int max, struct uproc* up)
+{
+ acquire(&ptable.lock);
+ int counter = 0;
+ struct proc* testProc;
+
+ for(testProc = ptable.proc; testProc < &ptable.proc[NPROC]; testProc++){
+   if (counter == max)
+     break;
+   if (testProc->state == EMBRYO || testProc->state == UNUSED){
+     continue;
+   }else if(testProc->state == SLEEPING || testProc->state == RUNNABLE || testProc->state == RUNNING || testProc->state == ZOMBIE) {
+     up[counter].pid = testProc->pid;
+     up[counter].uid = testProc->uid;
+     up[counter].gid = testProc->gid;
+
+     // Handle init PPID
+     if (testProc->pid != 1){
+       up[counter].ppid = testProc->parent->pid;
+     }else{
+       up[counter].ppid = testProc->pid;
+     }
+
+     up[counter].CPU_total_ticks = testProc->cpu_ticks_total;
+     up[counter].elapsed_ticks = ticks - testProc->start_ticks;
+     safestrcpy(up[counter].state, states[testProc->state], sizeof(up[counter].state));
+     up[counter].size = testProc->sz;
+     safestrcpy(up[counter].name, (char*)testProc->name, sizeof(testProc->name));
+ 
+     counter++;
+   }
+ }
+
+ release(&ptable.lock);
+ return counter;
+}
+#endif // CS333_P2
+
 
 void
 procdump(void)
