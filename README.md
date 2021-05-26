@@ -1,4 +1,4 @@
-# Assignment 1 Operating System Class
+# Assignment 2 Operating System Class
 * Nama : Farhan Dewanta Syahputra
 * NIM  : 1313619017
 * Ilmu Komputer 2019
